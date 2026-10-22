@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { runCampaignAction } from "./campaign-runner.ts";
 import { campaignActions } from "./commands.ts";
+import { ConfigError } from "./errors.ts";
 import { loadInstance } from "./instance.ts";
 import { createMarketoClient } from "./marketo-client.ts";
 
@@ -20,6 +21,18 @@ export interface CliDeps {
 
 /** The CLI entry: `argv` starts with the command name. Returns the exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
+  try {
+    return await run(argv, deps);
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      deps.output.error(error.message);
+      return 2;
+    }
+    throw error;
+  }
+}
+
+async function run(argv: string[], deps: CliDeps): Promise<number> {
   const [commandName, ...rest] = argv;
   const action = campaignActions[commandName ?? ""]!;
   const { values } = parseArgs({
