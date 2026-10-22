@@ -59,6 +59,21 @@ describe("saving a run record", () => {
     });
   });
 
+  it("lists every reference to the same campaign, each with the first one's outcome", async () => {
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=Send Invite", "--campaign=1692", "--campaign=1692", "--yes"],
+      { marketo: { campaigns: [{ id: 1692, name: "Send Invite", programName: "Webinar" }] } },
+    );
+
+    expect(run.stdout.match(/^done\s+1692 Send Invite$/gm)).toHaveLength(1);
+    const [only] = runRecords(run.instancesRoot);
+    expect((only!.record as { campaigns: unknown }).campaigns).toEqual([
+      { reference: "Send Invite", id: 1692, name: "Send Invite", outcome: "done" },
+      { reference: "1692", id: 1692, name: "Send Invite", outcome: "done" },
+      { reference: "1692", id: 1692, name: "Send Invite", outcome: "done" },
+    ]);
+  });
+
   it("takes the start and finish timestamps from the injected clock", async () => {
     const ticks = [new Date("2026-10-22T09:30:00.000Z"), new Date("2026-10-22T09:31:15.250Z")];
     const run = await runTestCli(["campaigns:deactivate", "--instance=sec", "--campaign=1", "--yes"], {

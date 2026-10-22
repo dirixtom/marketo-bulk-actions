@@ -24,6 +24,8 @@ interface CampaignResult {
   name?: string;
   outcome?: Outcome;
   reason?: string;
+  /** The earlier result for the same campaign: this one is acted on and printed once, under it. */
+  sameAs?: CampaignResult;
 }
 
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
@@ -31,11 +33,16 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
   const { client, references, output } = options;
   const startedAt = options.now();
   const resolutions = await resolveReferences(references, client, options.workspace);
-  const results: CampaignResult[] = resolutions.map((resolution) =>
-    "id" in resolution
-      ? { reference: resolution.reference, id: resolution.id }
-      : { reference: resolution.reference, outcome: "failed", reason: resolution.error },
-  );
+  const firstById = new Map<number, CampaignResult>();
+  const allResults: CampaignResult[] = resolutions.map((resolution) => {
+    if (!("id" in resolution)) return { reference: resolution.reference, outcome: "failed", reason: resolution.error };
+    const result: CampaignResult = { reference: resolution.reference, id: resolution.id };
+    const first = firstById.get(resolution.id);
+    if (first) result.sameAs = first;
+    else firstById.set(resolution.id, result);
+    return result;
+  });
+  const results = allResults.filter((result) => result.sameAs === undefined);
 
   await settleAll(results.filter((r) => r.outcome === undefined).map((result) => plan(action, client, result)));
   const toChange = results.filter((r) => r.outcome === undefined);
@@ -85,10 +92,11 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
     workspace: options.workspace ?? null,
     startedAt: startedAt.toISOString(),
     finishedAt: options.now().toISOString(),
-    campaigns: results.map((result) => {
+    campaigns: allResults.map((entry) => {
+      const result = entry.sameAs ?? entry;
       const outcome = result.outcome ?? "failed";
       return {
-        reference: result.reference,
+        reference: entry.reference,
         id: result.id !== undefined && !Number.isNaN(result.id) ? result.id : null,
         name: result.name ?? null,
         outcome,

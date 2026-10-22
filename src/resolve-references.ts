@@ -56,18 +56,9 @@ async function folderName(id: number, client: MarketoClient): Promise<string | u
   return (await client.getFolderName(folder.id)) ?? undefined;
 }
 
-/**
- * Matches each reference exactly against the catalog's names and `Parent.Campaign` strings.
- * A campaign several references resolve to is kept once, under the first of them.
- */
+/** Matches each reference exactly against the catalog's names and `Parent.Campaign` strings. */
 export function matchReferences(references: string[], catalog: CatalogEntry[]): Resolution[] {
-  const seen = new Set<number>();
-  return references.map((reference) => matchReference(reference, catalog)).filter((resolution) => {
-    if (!("id" in resolution)) return true;
-    if (seen.has(resolution.id)) return false;
-    seen.add(resolution.id);
-    return true;
-  });
+  return references.map((reference) => matchReference(reference, catalog));
 }
 
 function matchReference(reference: string, catalog: CatalogEntry[]): Resolution {
