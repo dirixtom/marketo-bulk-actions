@@ -100,7 +100,7 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
         id: result.id !== undefined && !Number.isNaN(result.id) ? result.id : null,
         name: result.name ?? null,
         outcome,
-        ...(outcome === "failed" ? { reason: result.reason ?? "unknown error" } : {}),
+        ...(result.reason !== undefined ? { reason: result.reason } : {}),
       };
     }),
   });

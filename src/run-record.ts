@@ -8,7 +8,7 @@ export interface RunRecordCampaign {
   id: number | null;
   name: string | null;
   outcome: Outcome;
-  /** Present only when the outcome is `failed`. */
+  /** Why the campaign failed or was skipped. */
   reason?: string;
 }
 

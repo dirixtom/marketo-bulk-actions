@@ -46,7 +46,7 @@ describe("saving a run record", () => {
       finishedAt: "2026-10-22T09:30:00.000Z",
       campaigns: [
         { reference: "1", id: 1, name: "Off", outcome: "done" },
-        { reference: "2", id: 2, name: "Already on", outcome: "skipped" },
+        { reference: "2", id: 2, name: "Already on", outcome: "skipped", reason: "already active" },
         {
           reference: "3",
           id: 3,
