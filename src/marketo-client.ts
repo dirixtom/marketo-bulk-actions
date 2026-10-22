@@ -33,6 +33,14 @@ export class MarketoApiError extends Error {
   }
 }
 
+/** The identity endpoint refused the client ID and secret. Ends the run. */
+export class MarketoAuthError extends Error {
+  override name = "MarketoAuthError";
+  constructor(readonly status: number) {
+    super(`Marketo identity endpoint returned HTTP ${status}`);
+  }
+}
+
 const NOT_FOUND_CODES = new Set(["702", "610"]);
 
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
@@ -50,7 +58,9 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     url.searchParams.set("client_id", credentials.clientId);
     url.searchParams.set("client_secret", credentials.clientSecret);
     const response = await deps.fetch(url);
-    const body = (await response.json()) as { access_token: string };
+    if (!response.ok) throw new MarketoAuthError(response.status);
+    const body = (await response.json()) as { access_token?: string };
+    if (!body.access_token) throw new MarketoAuthError(response.status);
     return body.access_token;
   }
 

@@ -1,6 +1,7 @@
 import type { CampaignAction } from "./commands.ts";
 import type { Instance } from "./instance.ts";
-import { MarketoApiError, type MarketoClient } from "./marketo-client.ts";
+import { MarketoApiError, MarketoAuthError, type MarketoClient } from "./marketo-client.ts";
+import { resolveReferences } from "./resolve-references.ts";
 import type { Output } from "./cli.ts";
 
 export interface RunOptions {
@@ -26,10 +27,14 @@ interface CampaignResult {
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
 export async function runCampaignAction(action: CampaignAction, options: RunOptions): Promise<number> {
   const { client, references, output } = options;
-  const results: CampaignResult[] = references.map((reference) => ({ reference, id: Number(reference) }));
+  const results: CampaignResult[] = resolveReferences(references).map((resolution) =>
+    "id" in resolution
+      ? { reference: resolution.reference, id: resolution.id }
+      : { reference: resolution.reference, outcome: "failed", reason: resolution.error },
+  );
 
   for (const result of results) {
-    await plan(action, client, result);
+    if (result.outcome === undefined) await plan(action, client, result);
   }
   const toChange = results.filter((r) => r.outcome === undefined);
   const exitCode = () => (results.some((r) => r.outcome === "failed") ? 1 : 0);
@@ -112,7 +117,9 @@ function fail(result: CampaignResult, reason: string): void {
   result.reason = reason;
 }
 
+/** Describes an error that fails one campaign; errors that must end the run are rethrown. */
 function describeError(error: unknown): string {
+  if (error instanceof MarketoAuthError) throw error;
   if (error instanceof MarketoApiError) return `Marketo error ${error.code}: ${error.marketoMessage}`;
   return error instanceof Error ? error.message : String(error);
 }
