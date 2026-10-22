@@ -37,9 +37,7 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
       : { reference: resolution.reference, outcome: "failed", reason: resolution.error },
   );
 
-  for (const result of results) {
-    if (result.outcome === undefined) await plan(action, client, result);
-  }
+  await settleAll(results.filter((r) => r.outcome === undefined).map((result) => plan(action, client, result)));
   const toChange = results.filter((r) => r.outcome === undefined);
   const exitCode = () => (results.some((r) => r.outcome === "failed") ? 1 : 0);
 
@@ -65,23 +63,18 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
   }
 
   let quotaError: MarketoQuotaError | undefined;
-  for (const result of toChange) {
-    if (quotaError) {
-      fail(result, QUOTA_REASON);
-      continue;
-    }
-    try {
-      await action.act(client, result.id!);
-      result.outcome = "done";
-    } catch (error) {
-      if (error instanceof MarketoQuotaError) {
+  await settleAll(
+    toChange.map(async (result) => {
+      try {
+        await action.act(client, result.id!);
+        result.outcome = "done";
+      } catch (error) {
+        if (!(error instanceof MarketoQuotaError)) return fail(result, describeError(error));
         quotaError = error;
         fail(result, QUOTA_REASON);
-      } else {
-        fail(result, describeError(error));
       }
-    }
-  }
+    }),
+  );
 
   output.log("");
   report(results, output);
@@ -108,6 +101,15 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
 }
 
 const QUOTA_REASON = "daily API quota reached";
+
+/**
+ * Waits for every task, then rethrows the first error that must end the run. The Marketo
+ * client caps how many calls run at once, so the tasks can all start together.
+ */
+async function settleAll(tasks: Promise<void>[]): Promise<void> {
+  const rejected = (await Promise.allSettled(tasks)).find((s) => s.status === "rejected");
+  if (rejected) throw rejected.reason;
+}
 
 function printPlan(action: CampaignAction, results: CampaignResult[], output: Output): void {
   const sections: [string, CampaignResult[]][] = [

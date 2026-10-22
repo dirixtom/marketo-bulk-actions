@@ -144,7 +144,24 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     return ok([{ id }]);
   }
 
+  let inFlight = 0;
+  let maxInFlight = 0;
+
+  /** Answers a REST request one macrotask later, so concurrent callers overlap as on a real network. */
   const fakeFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const restCall = new URL(input instanceof Request ? input.url : input).pathname.startsWith("/rest/");
+    if (!restCall) return answer(input, init);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      return answer(input, init);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+
+  function answer(input: string | URL | Request, init?: RequestInit): Response {
     const request = new Request(input, init);
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
@@ -216,7 +233,7 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     }
 
     return failure("610");
-  };
+  }
 
   return {
     fetch: fakeFetch as typeof fetch,
@@ -225,6 +242,8 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     restRequests: () => requests.filter((r) => r.url.pathname.startsWith("/rest/")),
     tokenRequests: () => requests.filter((r) => r.url.pathname === "/identity/oauth/token"),
     campaign: (id: number) => campaigns.get(id),
+    /** The most REST requests that were in flight at the same time. */
+    maxConcurrentRequests: () => maxInFlight,
     /** Make matching calls return `success:false` with this code (once by default). */
     failWith: (error: InjectedError) => injected.push({ times: 1, ...error }),
   };

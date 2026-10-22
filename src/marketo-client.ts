@@ -65,11 +65,32 @@ const THROTTLE_CODES = new Set(["606", "615"]);
 const FIRST_BACKOFF_MS = 2000;
 const MAX_THROTTLED_ATTEMPTS = 5;
 const QUOTA_CODE = "607";
+/** Marketo allows 10 concurrent REST calls per instance. */
+const MAX_CALLS_IN_FLIGHT = 10;
+
+/** Runs at most `max` tasks at a time; the rest wait in call order. */
+function createLimiter(max: number) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async function limit<T>(task: () => Promise<T>): Promise<T> {
+    if (running < max) running += 1;
+    else await new Promise<void>((resolve) => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      // Hand the slot straight to the next waiting task, if any.
+      const next = waiting.shift();
+      if (next) next();
+      else running -= 1;
+    }
+  };
+}
 
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
   let token: Promise<string> | undefined;
   const folderNames = new Map<number, Promise<string | null>>();
+  const inFlight = createLimiter(MAX_CALLS_IN_FLIGHT);
 
   function getToken(): Promise<string> {
     token ??= fetchToken();
@@ -93,11 +114,11 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     let throttledAttempts = 0;
     for (;;) {
       const tokenUsed = getToken();
-      const response = await deps.fetch(`${base}/rest${path}`, {
-        method,
-        headers: { Authorization: `Bearer ${await tokenUsed}` },
+      const authorization = `Bearer ${await tokenUsed}`;
+      const body = await inFlight(async () => {
+        const response = await deps.fetch(`${base}/rest${path}`, { method, headers: { Authorization: authorization } });
+        return (await response.json()) as MarketoResponse;
       });
-      const body = (await response.json()) as MarketoResponse;
       if (body.success) return body;
       const error = body.errors?.[0];
       const code = error?.code ?? "unknown";

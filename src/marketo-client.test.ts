@@ -101,6 +101,22 @@ describe("Marketo rate and concurrency limits", () => {
     expect(run.sleeps).toEqual([2000, 4000, 8000, 16000]);
     expect(fake.restRequests().filter((r) => r.url.pathname === ACTIVATE_1)).toHaveLength(5);
   });
+
+  it("keeps at most 10 calls in flight and reports campaigns in reference order", async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => 25 - i);
+    const fake = createFakeMarketo({ campaigns: ids.map((id) => ({ id, name: `Campaign ${id}` })) });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", ...ids.map((id) => `--campaign=${id}`), "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(0);
+    expect(fake.maxConcurrentRequests()).toBe(10);
+    const doneLines = run.stdout.split("\n").filter((line) => line.startsWith("done"));
+    expect(doneLines.map((line) => Number(line.split(/\s+/)[1]))).toEqual(ids);
+    expect(run.stdout).toContain("25 done · 0 skipped · 0 failed");
+  });
 });
 
 describe("Marketo daily quota", () => {
