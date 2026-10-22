@@ -65,3 +65,38 @@ describe("Marketo token refresh", () => {
     expect(fake.tokenRequests()).toHaveLength(2);
   });
 });
+
+describe("Marketo rate and concurrency limits", () => {
+  it.each(["606", "615"])("backs off from 2 s and retries a call throttled with %s", async (code) => {
+    const fake = createFakeMarketo({ campaigns: [{ id: 1, name: "One" }] });
+    fake.failWith({ method: "POST", path: ACTIVATE_1, code, times: 2 });
+
+    const run = await runTestCli(["campaigns:activate", "--instance=sec", "--campaign=1", "--yes"], { fake });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toMatch(/^done\s+1 One$/m);
+    expect(run.sleeps).toEqual([2000, 4000]);
+    expect(fake.restRequests().filter((r) => r.method === "POST")).toHaveLength(3);
+  });
+
+  it("fails the campaign after 5 throttled attempts and carries on with the rest", async () => {
+    const fake = createFakeMarketo({
+      campaigns: [
+        { id: 1, name: "One" },
+        { id: 2, name: "Two" },
+      ],
+    });
+    fake.failWith({ method: "POST", path: ACTIVATE_1, code: "606", times: 5 });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=1", "--campaign=2", "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toMatch(/^failed\s+1 One \(Marketo error 606: Max rate limit .*\)$/m);
+    expect(run.stdout).toMatch(/^done\s+2 Two$/m);
+    expect(run.sleeps).toEqual([2000, 4000, 8000, 16000]);
+    expect(fake.restRequests().filter((r) => r.url.pathname === ACTIVATE_1)).toHaveLength(5);
+  });
+});

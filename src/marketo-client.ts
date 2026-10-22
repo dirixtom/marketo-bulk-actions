@@ -52,6 +52,10 @@ export class MarketoAuthError extends Error {
 const NOT_FOUND_CODES = new Set(["702", "610"]);
 /** Invalid or expired access token: fetch a new one and retry once. */
 const TOKEN_CODES = new Set(["601", "602"]);
+/** Rate limit (606) or concurrency limit (615) exceeded: back off exponentially and retry. */
+const THROTTLE_CODES = new Set(["606", "615"]);
+const FIRST_BACKOFF_MS = 2000;
+const MAX_THROTTLED_ATTEMPTS = 5;
 
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
@@ -77,6 +81,7 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
 
   async function call(method: "GET" | "POST", path: string): Promise<MarketoResponse> {
     let reauthenticated = false;
+    let throttledAttempts = 0;
     for (;;) {
       const tokenUsed = getToken();
       const response = await deps.fetch(`${base}/rest${path}`, {
@@ -91,6 +96,10 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
         reauthenticated = true;
         // Calls in flight share the token; only the first to see it rejected fetches a new one.
         if (token === tokenUsed) token = undefined;
+        continue;
+      }
+      if (THROTTLE_CODES.has(code) && ++throttledAttempts < MAX_THROTTLED_ATTEMPTS) {
+        await deps.sleep(FIRST_BACKOFF_MS * 2 ** (throttledAttempts - 1));
         continue;
       }
       throw new MarketoApiError(code, error?.message ?? "Marketo returned success:false");

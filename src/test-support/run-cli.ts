@@ -23,6 +23,8 @@ export interface TestRunResult {
   /** stdout and stderr interleaved, in order. */
   output: string;
   prompts: string[];
+  /** Every duration passed to the injected sleep, in ms. */
+  sleeps: number[];
   fake: FakeMarketo;
   instancesRoot: string;
 }
@@ -35,6 +37,7 @@ export async function runTestCli(argv: string[], options: TestRunOptions = {}): 
   let stderr = "";
   let output = "";
   const prompts: string[] = [];
+  const sleeps: number[] = [];
 
   const exitCode = await runCli(argv, {
     instancesRoot,
@@ -55,8 +58,10 @@ export async function runTestCli(argv: string[], options: TestRunOptions = {}): 
       },
     },
     now: options.now ?? (() => FIXED_NOW),
-    sleep: async () => {},
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
   });
 
-  return { exitCode, stdout, stderr, output, prompts, fake, instancesRoot };
+  return { exitCode, stdout, stderr, output, prompts, sleeps, fake, instancesRoot };
 }
