@@ -62,6 +62,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       confirm: deps.confirm,
       dryRun: values["dry-run"] ?? false,
       yes: values.yes ?? false,
+      now: deps.now,
     });
   } catch (error) {
     if (error instanceof ConfigError) {
