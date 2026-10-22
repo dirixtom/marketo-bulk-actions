@@ -9,6 +9,14 @@ export interface SmartCampaign {
   workspace?: string;
 }
 
+/** A campaign as listed by the Lead Database API. `programName` is absent outside programs. */
+export interface CatalogCampaign {
+  id: number;
+  name: string;
+  programName?: string;
+  workspaceName?: string;
+}
+
 export interface MarketoClientDeps {
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
@@ -46,6 +54,7 @@ const NOT_FOUND_CODES = new Set(["702", "610"]);
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
   let token: Promise<string> | undefined;
+  const folderNames = new Map<number, Promise<string | null>>();
 
   function getToken(): Promise<string> {
     token ??= fetchToken();
@@ -87,6 +96,42 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
         if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
         throw error;
       }
+    },
+    /** Every smart campaign in the instance, or in one workspace, from the Lead Database API. */
+    async listCampaigns(options: { workspaceName?: string } = {}): Promise<CatalogCampaign[]> {
+      const campaigns: CatalogCampaign[] = [];
+      let nextPageToken: string | undefined;
+      do {
+        const query = new URLSearchParams({ batchSize: "300" });
+        if (options.workspaceName !== undefined) query.set("workspaceName", options.workspaceName);
+        if (nextPageToken !== undefined) query.set("nextPageToken", nextPageToken);
+        const body = await call("GET", `/v1/campaigns.json?${query}`);
+        for (const record of (body.result ?? []) as CatalogCampaign[]) {
+          campaigns.push({
+            id: record.id,
+            name: record.name,
+            programName: record.programName,
+            workspaceName: record.workspaceName,
+          });
+        }
+        nextPageToken = body.nextPageToken;
+      } while (nextPageToken);
+      return campaigns;
+    },
+    /** Returns null when Marketo has no folder with this ID. */
+    getFolderName(id: number): Promise<string | null> {
+      let name = folderNames.get(id);
+      if (!name) {
+        name = call("GET", `/asset/v1/folder/${id}.json?type=Folder`).then(
+          (body) => (body.result?.[0] as { name?: string } | undefined)?.name ?? null,
+          (error) => {
+            if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
+            throw error;
+          },
+        );
+        folderNames.set(id, name);
+      }
+      return name;
     },
     async activateSmartCampaign(id: number): Promise<void> {
       await call("POST", `/asset/v1/smartCampaign/${id}/activate.json`);

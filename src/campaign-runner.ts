@@ -27,7 +27,7 @@ interface CampaignResult {
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
 export async function runCampaignAction(action: CampaignAction, options: RunOptions): Promise<number> {
   const { client, references, output } = options;
-  const results: CampaignResult[] = resolveReferences(references).map((resolution) =>
+  const results: CampaignResult[] = (await resolveReferences(references, client)).map((resolution) =>
     "id" in resolution
       ? { reference: resolution.reference, id: resolution.id }
       : { reference: resolution.reference, outcome: "failed", reason: resolution.error },

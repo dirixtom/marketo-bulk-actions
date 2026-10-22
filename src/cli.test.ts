@@ -22,17 +22,4 @@ describe("command line flags", () => {
     expect(run.stderr).toContain(message);
     expect(run.fake.requests).toHaveLength(0);
   });
-
-  it("fails references that are not numeric IDs as not yet supported, and acts on the rest", async () => {
-    const run = await runTestCli(
-      ["campaigns:activate", "--instance=sec", "--campaign=Webinar.01 - Send Invite", "--campaign=1692", "--yes"],
-      { marketo: { campaigns } },
-    );
-
-    expect(run.exitCode).toBe(1);
-    expect(run.stdout).toMatch(
-      /^failed\s+Webinar\.01 - Send Invite \(campaign names are not yet supported, use the numeric ID\)$/m,
-    );
-    expect(run.stdout).toMatch(/^done\s+1692 Send Invite$/m);
-  });
 });
