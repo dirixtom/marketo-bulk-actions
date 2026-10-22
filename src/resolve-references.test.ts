@@ -131,6 +131,22 @@ describe("fetching the campaign catalog", () => {
   });
 });
 
+describe("looking up folder names", () => {
+  it("looks up the folders of campaigns outside programs concurrently", async () => {
+    const ids = [1, 2, 3, 4, 5];
+    const run = await runTestCli(activate("Folder 3.Score leads"), {
+      marketo: {
+        campaigns: ids.map((id) => ({ id, name: "Score leads", folder: { id: id * 10, type: "Folder" as const } })),
+        folders: ids.map((id) => ({ id: id * 10, name: `Folder ${id}` })),
+      },
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.fake.campaign(3)?.isActive).toBe(true);
+    expect(run.fake.maxConcurrentRequests()).toBe(5);
+  });
+});
+
 describe("narrowing names to one workspace", () => {
   const campaigns = [
     { id: 1, name: "Send Invite", programName: "EMEA Webinar", workspace: "EMEA" },

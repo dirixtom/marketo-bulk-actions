@@ -37,17 +37,19 @@ async function workspaceName(workspace: string | undefined, client: MarketoClien
 
 /**
  * Lists the campaigns once. Campaigns outside a program get their folder name, looked up only
- * when a reference could match them, since that costs two calls per campaign.
+ * when a reference could match them, since that costs two calls per campaign. The lookups run
+ * concurrently and the client caps how many calls are in flight.
  */
 async function loadCatalog(names: string[], client: MarketoClient, workspace?: string): Promise<CatalogEntry[]> {
-  const catalog: CatalogEntry[] = [];
-  for (const campaign of await client.listCampaigns({ workspaceName: workspace })) {
-    const entry: CatalogEntry = { id: campaign.id, name: campaign.name, parentName: campaign.programName };
-    const mayMatch = names.some((name) => name === campaign.name || name.endsWith(`.${campaign.name}`));
-    if (entry.parentName === undefined && mayMatch) entry.parentName = await folderName(campaign.id, client);
-    catalog.push(entry);
-  }
-  return catalog;
+  const campaigns = await client.listCampaigns({ workspaceName: workspace });
+  return Promise.all(
+    campaigns.map(async (campaign): Promise<CatalogEntry> => {
+      const entry: CatalogEntry = { id: campaign.id, name: campaign.name, parentName: campaign.programName };
+      const mayMatch = names.some((name) => name === campaign.name || name.endsWith(`.${campaign.name}`));
+      if (entry.parentName === undefined && mayMatch) entry.parentName = await folderName(campaign.id, client);
+      return entry;
+    }),
+  );
 }
 
 async function folderName(id: number, client: MarketoClient): Promise<string | undefined> {
