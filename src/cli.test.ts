@@ -10,11 +10,6 @@ describe("command line flags", () => {
     ["no campaign references", ["campaigns:activate", "--instance=sec"], "No campaign references"],
     ["an unknown command", ["campaigns:archive", "--instance=sec", "--campaign=1692"], "Unknown command"],
     ["--list", ["campaigns:activate", "--instance=sec", "--list=q4"], "--list is not yet supported"],
-    [
-      "--workspace",
-      ["campaigns:activate", "--instance=sec", "--campaign=1692", "--workspace=Default"],
-      "--workspace is not yet supported",
-    ],
   ])("exits 2 without calling Marketo on %s", async (_, argv, message) => {
     const run = await runTestCli(argv, { marketo: { campaigns } });
 

@@ -130,3 +130,20 @@ describe("fetching the campaign catalog", () => {
     expect(pages.map((r) => r.url.searchParams.get("nextPageToken"))).toEqual([null, "300", "600"]);
   });
 });
+
+describe("narrowing names to one workspace", () => {
+  const campaigns = [
+    { id: 1, name: "Send Invite", programName: "EMEA Webinar", workspace: "EMEA" },
+    { id: 2, name: "Send Invite", programName: "US Webinar", workspace: "US" },
+  ];
+
+  it("passes --workspace by name as workspaceName", async () => {
+    const run = await runTestCli([...activate("Send Invite"), "--workspace=EMEA"], { marketo: { campaigns } });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.fake.campaign(1)?.isActive).toBe(true);
+    expect(run.fake.campaign(2)?.isActive).toBe(false);
+    const catalog = run.fake.restRequests().filter((r) => r.url.pathname === "/rest/v1/campaigns.json");
+    expect(catalog.map((r) => r.url.searchParams.get("workspaceName"))).toEqual(["EMEA"]);
+  });
+});

@@ -12,9 +12,13 @@ export interface CatalogEntry {
 const ID_PATTERN = /^\d+$/;
 
 /** Turns campaign references into smart campaign IDs, fetching the campaign catalog only for names. */
-export async function resolveReferences(references: string[], client: MarketoClient): Promise<Resolution[]> {
+export async function resolveReferences(
+  references: string[],
+  client: MarketoClient,
+  workspace?: string,
+): Promise<Resolution[]> {
   const names = references.filter((reference) => !ID_PATTERN.test(reference));
-  const catalog = names.length === 0 ? [] : await loadCatalog(names, client);
+  const catalog = names.length === 0 ? [] : await loadCatalog(names, client, workspace);
   return matchReferences(references, catalog);
 }
 
@@ -22,9 +26,9 @@ export async function resolveReferences(references: string[], client: MarketoCli
  * Lists the campaigns once. Campaigns outside a program get their folder name, looked up only
  * when a reference could match them, since that costs two calls per campaign.
  */
-async function loadCatalog(names: string[], client: MarketoClient): Promise<CatalogEntry[]> {
+async function loadCatalog(names: string[], client: MarketoClient, workspace?: string): Promise<CatalogEntry[]> {
   const catalog: CatalogEntry[] = [];
-  for (const campaign of await client.listCampaigns()) {
+  for (const campaign of await client.listCampaigns({ workspaceName: workspace })) {
     const entry: CatalogEntry = { id: campaign.id, name: campaign.name, parentName: campaign.programName };
     const mayMatch = names.some((name) => name === campaign.name || name.endsWith(`.${campaign.name}`));
     if (entry.parentName === undefined && mayMatch) entry.parentName = await folderName(campaign.id, client);
