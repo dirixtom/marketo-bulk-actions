@@ -1,0 +1,6 @@
+# One campaign reference per line, or several per line separated by commas.
+# A reference is a smart campaign ID, a campaign name, or "Program Name.Campaign Name".
+# Wrap names that contain commas in double quotes.
+1692
+Webinar 2026.10 Q4.01 - Send Invite
+"Newsletter, October.Send"
