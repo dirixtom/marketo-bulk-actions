@@ -58,4 +58,49 @@ describe("saving a run record", () => {
       ],
     });
   });
+
+  it("takes the start and finish timestamps from the injected clock", async () => {
+    const ticks = [new Date("2026-10-22T09:30:00.000Z"), new Date("2026-10-22T09:31:15.250Z")];
+    const run = await runTestCli(["campaigns:deactivate", "--instance=sec", "--campaign=1", "--yes"], {
+      marketo: { campaigns: [{ id: 1, name: "On", isActive: true }] },
+      now: () => ticks.shift() ?? new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    const [only] = runRecords(run.instancesRoot);
+    expect(only!.file).toBe("2026-10-22T09-30-00.000Z-campaigns-deactivate.json");
+    expect(only!.record).toMatchObject({
+      command: "campaigns:deactivate",
+      startedAt: "2026-10-22T09:30:00.000Z",
+      finishedAt: "2026-10-22T09:31:15.250Z",
+    });
+  });
+
+  it("writes no record on a dry run", async () => {
+    const run = await runTestCli(["campaigns:activate", "--instance=sec", "--campaign=1", "--dry-run"], {
+      marketo: { campaigns: [{ id: 1, name: "Off" }] },
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(runRecords(run.instancesRoot)).toEqual([]);
+  });
+
+  it("writes no record when the operator declines the prompt", async () => {
+    const run = await runTestCli(["campaigns:activate", "--instance=sec", "--campaign=1"], {
+      marketo: { campaigns: [{ id: 1, name: "Off" }] },
+      confirm: false,
+    });
+
+    expect(run.prompts).toHaveLength(1);
+    expect(runRecords(run.instancesRoot)).toEqual([]);
+  });
+
+  it("writes no record when there is nothing to change", async () => {
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=1", "--campaign=404", "--yes"],
+      { marketo: { campaigns: [{ id: 1, name: "On", isActive: true }] } },
+    );
+
+    expect(run.stdout).toContain("Nothing to activate.");
+    expect(runRecords(run.instancesRoot)).toEqual([]);
+  });
 });
