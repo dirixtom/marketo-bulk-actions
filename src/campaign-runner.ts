@@ -24,9 +24,18 @@ interface CampaignResult {
   name?: string;
   outcome?: Outcome;
   reason?: string;
-  /** The earlier result for the same campaign: this one is acted on and printed once, under it. */
+  /** The earlier result for the same campaign. The campaign is acted on and printed once, under that result. */
   sameAs?: CampaignResult;
 }
+
+/** A result whose reference resolved to a campaign ID. */
+type ResolvedResult = CampaignResult & { id: number };
+/** A result once planning or acting has given it an outcome. */
+type SettledResult = CampaignResult & { outcome: Outcome };
+
+const isPending = (result: CampaignResult): result is ResolvedResult =>
+  result.id !== undefined && result.outcome === undefined;
+const isSettled = (result: CampaignResult): result is SettledResult => result.outcome !== undefined;
 
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
 export async function runCampaignAction(action: CampaignAction, options: RunOptions): Promise<number> {
@@ -44,8 +53,8 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
   });
   const results = allResults.filter((result) => result.sameAs === undefined);
 
-  await settleAll(results.filter((r) => r.outcome === undefined).map((result) => plan(action, client, result)));
-  const toChange = results.filter((r) => r.outcome === undefined);
+  await settleAll(results.filter(isPending).map((result) => plan(action, client, result)));
+  const toChange = results.filter(isPending);
   const exitCode = () => (results.some((r) => r.outcome === "failed") ? 1 : 0);
 
   printPlan(action, results, output);
@@ -53,7 +62,7 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
   if (toChange.length === 0) {
     output.log(`Nothing to ${action.verb}.`);
     output.log("");
-    report(results, output);
+    report(results.filter(isSettled), output);
     return exitCode();
   }
   if (options.dryRun) {
@@ -73,7 +82,7 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
   await settleAll(
     toChange.map(async (result) => {
       try {
-        await action.act(client, result.id!);
+        await action.act(client, result.id);
         result.outcome = "done";
       } catch (error) {
         const reason = RUN_ENDING_REASONS.find(([type]) => error instanceof type)?.[1];
@@ -83,26 +92,28 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
       }
     }),
   );
+  // A later reference to the same campaign takes over the first one's name, outcome and reason.
+  for (const result of allResults) {
+    if (!result.sameAs) continue;
+    const { name, outcome, reason } = result.sameAs;
+    Object.assign(result, { name, outcome, reason });
+  }
 
   output.log("");
-  report(results, output);
+  report(results.filter(isSettled), output);
   writeRunRecord(options.instance.folder, {
     command: action.command,
     instance: options.instance.name,
     workspace: options.workspace ?? null,
     startedAt: startedAt.toISOString(),
     finishedAt: options.now().toISOString(),
-    campaigns: allResults.map((entry) => {
-      const result = entry.sameAs ?? entry;
-      const outcome = result.outcome ?? "failed";
-      return {
-        reference: entry.reference,
-        id: result.id !== undefined && !Number.isNaN(result.id) ? result.id : null,
-        name: result.name ?? null,
-        outcome,
-        ...(result.reason !== undefined ? { reason: result.reason } : {}),
-      };
-    }),
+    campaigns: allResults.filter(isSettled).map((result) => ({
+      reference: result.reference,
+      id: result.id ?? null,
+      name: result.name ?? null,
+      outcome: result.outcome,
+      ...(result.reason !== undefined ? { reason: result.reason } : {}),
+    })),
   });
   // Reported and recorded first, so the operator sees what changed before the run ends.
   if (runEndingError) throw runEndingError;
@@ -143,10 +154,10 @@ function capitalize(text: string): string {
 }
 
 /** Reads the campaign and marks it skipped or failed when it must not change. */
-async function plan(action: CampaignAction, client: MarketoClient, result: CampaignResult): Promise<void> {
+async function plan(action: CampaignAction, client: MarketoClient, result: ResolvedResult): Promise<void> {
   let campaign;
   try {
-    campaign = await client.getSmartCampaign(result.id!);
+    campaign = await client.getSmartCampaign(result.id);
   } catch (error) {
     return fail(result, describeError(error));
   }
@@ -167,7 +178,7 @@ function fail(result: CampaignResult, reason: string): void {
   result.reason = reason;
 }
 
-/** Describes an error that fails one campaign; errors that must end the run are rethrown. */
+/** Describes an error that fails one campaign. Errors that must end the run are rethrown. */
 function describeError(error: unknown): string {
   if (error instanceof MarketoAuthError || error instanceof MarketoQuotaError) throw error;
   if (error instanceof MarketoApiError) return `Marketo error ${error.code}: ${error.marketoMessage}`;
@@ -176,19 +187,18 @@ function describeError(error: unknown): string {
 
 function label(result: CampaignResult): string {
   if (result.name !== undefined) return `${result.id} ${result.name}`;
-  return result.id !== undefined && !Number.isNaN(result.id) ? String(result.id) : result.reference;
+  return result.id !== undefined ? String(result.id) : result.reference;
 }
 
 function describe(result: CampaignResult): string {
   return `${label(result)}${result.reason ? ` (${result.reason})` : ""}`;
 }
 
-function report(results: CampaignResult[], output: Output): void {
+function report(results: SettledResult[], output: Output): void {
   const counts = { done: 0, skipped: 0, failed: 0 };
   for (const result of results) {
-    const outcome = result.outcome ?? "failed";
-    counts[outcome] += 1;
-    output.log(`${outcome.padEnd(8)} ${describe(result)}`);
+    counts[result.outcome] += 1;
+    output.log(`${result.outcome.padEnd(8)} ${describe(result)}`);
   }
   output.log(`${counts.done} done · ${counts.skipped} skipped · ${counts.failed} failed`);
 }
