@@ -62,16 +62,17 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
     }
   }
 
-  let quotaError: MarketoQuotaError | undefined;
+  let runEndingError: MarketoQuotaError | MarketoAuthError | undefined;
   await settleAll(
     toChange.map(async (result) => {
       try {
         await action.act(client, result.id!);
         result.outcome = "done";
       } catch (error) {
-        if (!(error instanceof MarketoQuotaError)) return fail(result, describeError(error));
-        quotaError = error;
-        fail(result, QUOTA_REASON);
+        const reason = RUN_ENDING_REASONS.find(([type]) => error instanceof type)?.[1];
+        if (reason === undefined) return fail(result, describeError(error));
+        runEndingError ??= error as MarketoQuotaError | MarketoAuthError;
+        fail(result, reason);
       }
     }),
   );
@@ -96,11 +97,15 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
     }),
   });
   // Reported and recorded first, so the operator sees what changed before the run ends.
-  if (quotaError) throw quotaError;
+  if (runEndingError) throw runEndingError;
   return exitCode();
 }
 
-const QUOTA_REASON = "daily API quota reached";
+/** Errors that end the run, with the reason given to each campaign they stopped while acting. */
+const RUN_ENDING_REASONS = [
+  [MarketoQuotaError, "daily API quota reached"],
+  [MarketoAuthError, "Marketo rejected the credentials"],
+] as const;
 
 /**
  * Waits for every task, then rethrows the first error that must end the run. The Marketo

@@ -66,6 +66,30 @@ describe("Marketo token refresh", () => {
     expect(run.stdout).toMatch(/^failed\s+1 One \(Marketo error 601: Access token invalid\)$/m);
     expect(fake.tokenRequests()).toHaveLength(2);
   });
+
+  it("reports what changed, saves the run record and exits 2 when the new token is refused while acting", async () => {
+    const fake = createFakeMarketo({
+      campaigns: [
+        { id: 1, name: "One" },
+        { id: 2, name: "Two" },
+      ],
+    });
+    fake.failWith({ method: "POST", path: "/rest/asset/v1/smartCampaign/2/activate.json", code: "602" });
+    fake.rejectTokenRequestsAfter(1);
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=1", "--campaign=2", "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(2);
+    expect(run.stdout).toMatch(/^done\s+1 One$/m);
+    expect(run.stdout).toMatch(/^failed\s+2 Two \(Marketo rejected the credentials\)$/m);
+    expect(run.stdout).toContain("1 done · 0 skipped · 1 failed");
+    expect(run.stderr).toContain("Marketo rejected the credentials for instance sec (HTTP 401)");
+    const runs = readdirSync(join(run.instancesRoot, "sec", "runs"));
+    expect(runs).toHaveLength(1);
+  });
 });
 
 describe("Marketo rate and concurrency limits", () => {

@@ -85,6 +85,7 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
   const injected: InjectedError[] = [];
   const issuedTokens = new Set<string>();
   let tokenCounter = 0;
+  let tokensAllowed = Number.POSITIVE_INFINITY;
 
   function json(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), {
@@ -175,7 +176,8 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
       if (
         p.get("grant_type") !== "client_credentials" ||
         p.get("client_id") !== clientId ||
-        p.get("client_secret") !== clientSecret
+        p.get("client_secret") !== clientSecret ||
+        tokenCounter >= tokensAllowed
       ) {
         return json({ error: "unauthorized", error_description: "Bad client credentials" }, 401);
       }
@@ -244,6 +246,10 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     campaign: (id: number) => campaigns.get(id),
     /** The most REST requests that were in flight at the same time. */
     maxConcurrentRequests: () => maxInFlight,
+    /** Refuse every token request after the first `count`, as when the API user is revoked mid-run. */
+    rejectTokenRequestsAfter: (count: number) => {
+      tokensAllowed = count;
+    },
     /** Make matching calls return `success:false` with this code (once by default). */
     failWith: (error: InjectedError) => injected.push({ times: 1, ...error }),
   };
