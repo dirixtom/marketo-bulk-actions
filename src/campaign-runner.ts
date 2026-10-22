@@ -2,6 +2,7 @@ import type { CampaignAction } from "./commands.ts";
 import type { Instance } from "./instance.ts";
 import { MarketoApiError, MarketoAuthError, type MarketoClient } from "./marketo-client.ts";
 import { resolveReferences } from "./resolve-references.ts";
+import { type Outcome, writeRunRecord } from "./run-record.ts";
 import type { Output } from "./cli.ts";
 
 export interface RunOptions {
@@ -12,9 +13,10 @@ export interface RunOptions {
   confirm: (question: string) => Promise<boolean>;
   dryRun: boolean;
   yes: boolean;
+  now: () => Date;
+  /** Workspace name the run was narrowed to, if any. */
+  workspace?: string;
 }
-
-type Outcome = "done" | "skipped" | "failed";
 
 interface CampaignResult {
   reference: string;
@@ -27,6 +29,7 @@ interface CampaignResult {
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
 export async function runCampaignAction(action: CampaignAction, options: RunOptions): Promise<number> {
   const { client, references, output } = options;
+  const startedAt = options.now();
   const results: CampaignResult[] = resolveReferences(references).map((resolution) =>
     "id" in resolution
       ? { reference: resolution.reference, id: resolution.id }
@@ -71,6 +74,23 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
 
   output.log("");
   report(results, output);
+  writeRunRecord(options.instance.folder, {
+    command: action.command,
+    instance: options.instance.name,
+    workspace: options.workspace ?? null,
+    startedAt: startedAt.toISOString(),
+    finishedAt: options.now().toISOString(),
+    campaigns: results.map((result) => {
+      const outcome = result.outcome ?? "failed";
+      return {
+        reference: result.reference,
+        id: result.id !== undefined && !Number.isNaN(result.id) ? result.id : null,
+        name: result.name ?? null,
+        outcome,
+        ...(outcome === "failed" ? { reason: result.reason ?? "unknown error" } : {}),
+      };
+    }),
+  });
   return exitCode();
 }
 
