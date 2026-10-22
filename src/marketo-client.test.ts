@@ -164,4 +164,18 @@ describe("Marketo daily quota", () => {
     const runs = readdirSync(join(run.instancesRoot, "sec", "runs"));
     expect(runs).toHaveLength(1);
   });
+
+  it("sends no further calls once 607 arrives", async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => i + 1);
+    const fake = createFakeMarketo({ campaigns: ids.map((id) => ({ id, name: `Campaign ${id}` })) });
+    fake.failWith({ path: "/rest/asset/v1/smartCampaign/1.json", code: "607" });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", ...ids.map((id) => `--campaign=${id}`), "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(1);
+    expect(fake.restRequests()).toHaveLength(10);
+  });
 });

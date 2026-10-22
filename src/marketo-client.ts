@@ -91,6 +91,7 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
   let token: Promise<string> | undefined;
   const folderNames = new Map<number, Promise<string | null>>();
   const inFlight = createLimiter(MAX_CALLS_IN_FLIGHT);
+  let quotaReached = false;
 
   function getToken(): Promise<string> {
     token ??= fetchToken();
@@ -116,8 +117,13 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
       const tokenUsed = getToken();
       const authorization = `Bearer ${await tokenUsed}`;
       const body = await inFlight(async () => {
+        // Once the quota is used up, every further call would be refused too.
+        if (quotaReached) throw new MarketoQuotaError();
         const response = await deps.fetch(`${base}/rest${path}`, { method, headers: { Authorization: authorization } });
-        return (await response.json()) as MarketoResponse;
+        const body = (await response.json()) as MarketoResponse;
+        // Set before the slot is handed to a waiting call.
+        if (body.errors?.[0]?.code === QUOTA_CODE) quotaReached = true;
+        return body;
       });
       if (body.success) return body;
       const error = body.errors?.[0];
