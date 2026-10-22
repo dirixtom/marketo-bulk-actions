@@ -7,6 +7,20 @@
 - Marketo API credentials (client ID, client secret, instance endpoints) go in `.env` / `.env.local` only. Commit placeholders in `.env.example`.
 - Update this section once the stack is scaffolded: package manager, build/test/lint commands, folder layout.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `dirixtom/marketo-bulk-actions`, via `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 # Global Development Standards
 
 ## Package Manager
