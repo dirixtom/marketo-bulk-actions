@@ -89,11 +89,11 @@ failed   Newsletter, October.Send (not found)
 
 6. Saves a JSON record of the run to `instances/<name>/runs/`.
 
-Exit codes: `0` all good, `1` at least one campaign failed, `2` configuration error (unknown instance, bad credentials, missing list, no references).
+Exit codes: `0` all good, `1` at least one campaign failed or the daily API quota ran out, `2` configuration error (unknown instance, bad credentials, missing list, no references).
 
 Only trigger campaigns can be activated or deactivated. Batch campaigns are scheduled in Marketo and fail with a clear reason.
 
-The tool keeps within Marketo's API limits: it reuses one access token per run and gets a new one when Marketo says it expired, retries throttled calls with back-off, and stops with a message when the daily quota is used up.
+The tool keeps within Marketo's API limits: it reuses one access token per run and gets a new one when Marketo says it expired, retries throttled calls with back-off, and stops with a message when the daily quota (50,000 calls, reset at 12:00 AM CST) is used up.
 
 ## Development
 
