@@ -39,16 +39,34 @@ async function folderName(id: number, client: MarketoClient): Promise<string | u
   return (await client.getFolderName(folder.id)) ?? undefined;
 }
 
-/** Matches each reference exactly against the catalog's names and `Parent.Campaign` strings. */
+/**
+ * Matches each reference exactly against the catalog's names and `Parent.Campaign` strings.
+ * A campaign several references resolve to is kept once, under the first of them.
+ */
 export function matchReferences(references: string[], catalog: CatalogEntry[]): Resolution[] {
-  return references.map((reference): Resolution => {
-    if (ID_PATTERN.test(reference)) return { reference, id: Number(reference) };
-    const matches = catalog.filter(
-      (campaign) =>
-        campaign.name === reference ||
-        (campaign.parentName !== undefined && `${campaign.parentName}.${campaign.name}` === reference),
-    );
-    if (matches.length === 1) return { reference, id: matches[0]!.id };
-    return { reference, error: "not found" };
+  const seen = new Set<number>();
+  return references.map((reference) => matchReference(reference, catalog)).filter((resolution) => {
+    if (!("id" in resolution)) return true;
+    if (seen.has(resolution.id)) return false;
+    seen.add(resolution.id);
+    return true;
   });
+}
+
+function matchReference(reference: string, catalog: CatalogEntry[]): Resolution {
+  if (ID_PATTERN.test(reference)) return { reference, id: Number(reference) };
+  const matches = catalog.filter(
+    (campaign) =>
+      campaign.name === reference ||
+      (campaign.parentName !== undefined && `${campaign.parentName}.${campaign.name}` === reference),
+  );
+  if (matches.length === 1) return { reference, id: matches[0]!.id };
+  if (matches.length === 0) return { reference, error: "not found" };
+  return { reference, error: `ambiguous, matches: ${matches.map(fullName).join("; ")}` };
+}
+
+function fullName(campaign: CatalogEntry): string {
+  return campaign.parentName === undefined
+    ? `${campaign.name} [ID ${campaign.id}]`
+    : `${campaign.parentName}.${campaign.name}`;
 }
