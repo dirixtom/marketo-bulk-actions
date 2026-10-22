@@ -5,7 +5,7 @@ export interface CampaignAction {
   command: string;
   /** `isActive` once the action has succeeded. */
   targetActive: boolean;
-  /** Infinitive, lower case: "activate". */
+  /** Infinitive, lower case, e.g. "activate". */
   verb: string;
   act: (client: MarketoClient, id: number) => Promise<void>;
 }

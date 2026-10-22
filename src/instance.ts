@@ -33,7 +33,7 @@ const credentialsSchema = z.object({
 const configSchema = z.strictObject({});
 export type InstanceConfig = z.infer<typeof configSchema>;
 
-/** Loads `<instancesRoot>/<name>`: credentials from `.env` then `.env.local`, and `config.json`. */
+/** Loads `<instancesRoot>/<name>`, reading credentials from `.env` then `.env.local`, and `config.json`. */
 export function loadInstance(name: string, instancesRoot: string): Instance {
   const folder = join(instancesRoot, name);
   if (!isSafeName(name) || !isDirectory(folder)) {

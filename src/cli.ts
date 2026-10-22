@@ -29,7 +29,7 @@ const FLAGS = {
   yes: { type: "boolean" },
 } as const;
 
-/** The CLI entry: `argv` starts with the command name. Returns the exit code. */
+/** The CLI entry. `argv` starts with the command name. Returns the exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   let instanceName: string | undefined;
   try {

@@ -14,7 +14,7 @@ export interface RunOptions {
   dryRun: boolean;
   yes: boolean;
   now: () => Date;
-  /** `--workspace` as given: a workspace name or ID that narrows name references. */
+  /** `--workspace` as given, a workspace name or ID that narrows name references. */
   workspace?: string;
 }
 

@@ -248,7 +248,7 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     rejectTokenRequestsAfter: (count: number) => {
       tokensAllowed = count;
     },
-    /** Make matching calls return `success:false` with this code (once by default). */
+    /** Make matching calls return `success:false` with this code, once by default. */
     failWith: (error: InjectedError) => injected.push({ times: 1, ...error }),
   };
 }

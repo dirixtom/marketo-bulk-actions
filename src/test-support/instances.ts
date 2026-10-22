@@ -10,7 +10,7 @@ export interface InstanceFixture {
   envLocal?: string;
   /** Contents of `config.json`; defaults to `{}`. `null` means no file. */
   config?: string | null;
-  /** List files by name (without `.csv`). */
+  /** List files by name, without `.csv`. */
   lists?: Record<string, string>;
 }
 
