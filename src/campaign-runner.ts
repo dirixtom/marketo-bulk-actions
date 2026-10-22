@@ -2,21 +2,21 @@ import type { CampaignAction } from "./commands.ts";
 import type { Instance } from "./instance.ts";
 import { MarketoApiError, MarketoAuthError, type MarketoClient } from "./marketo-client.ts";
 import { resolveReferences } from "./resolve-references.ts";
+import { type Outcome, writeRunRecord } from "./run-record.ts";
 import type { Output } from "./cli.ts";
 
 export interface RunOptions {
   instance: Instance;
   client: MarketoClient;
   references: string[];
-  /** `--workspace`: a workspace name or ID that narrows name references. */
-  workspace?: string;
   output: Output;
   confirm: (question: string) => Promise<boolean>;
   dryRun: boolean;
   yes: boolean;
+  now: () => Date;
+  /** `--workspace` as given: a workspace name or ID that narrows name references. */
+  workspace?: string;
 }
-
-type Outcome = "done" | "skipped" | "failed";
 
 interface CampaignResult {
   reference: string;
@@ -29,7 +29,9 @@ interface CampaignResult {
 /** The resolve, plan, confirm, act, report flow for one campaign action. */
 export async function runCampaignAction(action: CampaignAction, options: RunOptions): Promise<number> {
   const { client, references, output } = options;
-  const results: CampaignResult[] = (await resolveReferences(references, client, options.workspace)).map((resolution) =>
+  const startedAt = options.now();
+  const resolutions = await resolveReferences(references, client, options.workspace);
+  const results: CampaignResult[] = resolutions.map((resolution) =>
     "id" in resolution
       ? { reference: resolution.reference, id: resolution.id }
       : { reference: resolution.reference, outcome: "failed", reason: resolution.error },
@@ -73,6 +75,23 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
 
   output.log("");
   report(results, output);
+  writeRunRecord(options.instance.folder, {
+    command: action.command,
+    instance: options.instance.name,
+    workspace: options.workspace ?? null,
+    startedAt: startedAt.toISOString(),
+    finishedAt: options.now().toISOString(),
+    campaigns: results.map((result) => {
+      const outcome = result.outcome ?? "failed";
+      return {
+        reference: result.reference,
+        id: result.id !== undefined && !Number.isNaN(result.id) ? result.id : null,
+        name: result.name ?? null,
+        outcome,
+        ...(outcome === "failed" ? { reason: result.reason ?? "unknown error" } : {}),
+      };
+    }),
+  });
   return exitCode();
 }
 

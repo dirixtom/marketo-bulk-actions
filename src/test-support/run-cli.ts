@@ -12,6 +12,8 @@ export interface TestRunOptions {
   marketo?: FakeMarketoOptions;
   /** Answer given to the confirm prompt; `undefined` fails the test if asked. */
   confirm?: boolean;
+  /** Clock; defaults to always returning `FIXED_NOW`. */
+  now?: () => Date;
 }
 
 export interface TestRunResult {
@@ -52,7 +54,7 @@ export async function runTestCli(argv: string[], options: TestRunOptions = {}): 
         output += `${line}\n`;
       },
     },
-    now: () => FIXED_NOW,
+    now: options.now ?? (() => FIXED_NOW),
     sleep: async () => {},
   });
 
