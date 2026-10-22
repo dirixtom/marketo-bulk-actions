@@ -26,3 +26,7 @@ _Avoid_: Campaign path
 **Campaign list**:
 A document in an instance's folder holding campaign references, one per line or comma-separated.
 _Avoid_: Batch, selection
+
+**Campaign catalog**:
+Every smart campaign in scope for one run, with its name and parent name, fetched once so name references can be matched against it.
+_Avoid_: Index, cache
