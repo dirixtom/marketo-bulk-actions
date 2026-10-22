@@ -143,6 +143,23 @@ describe("Marketo rate and concurrency limits", () => {
   });
 });
 
+describe("Marketo concurrency limit with token refresh", () => {
+  it("counts token requests among the 10 calls in flight", async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => i + 1);
+    const fake = createFakeMarketo({ campaigns: ids.map((id) => ({ id, name: `Campaign ${id}` })) });
+    fake.failWith({ method: "POST", path: "/rest/asset/v1/smartCampaign/1/activate.json", code: "602" });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", ...ids.map((id) => `--campaign=${id}`), "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(0);
+    expect(fake.tokenRequests()).toHaveLength(2);
+    expect(fake.maxConcurrentRequests()).toBe(10);
+  });
+});
+
 describe("Marketo daily quota", () => {
   const QUOTA_MESSAGE = "Marketo daily API quota reached for instance sec (607). It resets at 12:00 AM CST.";
 

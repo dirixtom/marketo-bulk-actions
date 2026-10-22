@@ -103,11 +103,13 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     url.searchParams.set("grant_type", "client_credentials");
     url.searchParams.set("client_id", credentials.clientId);
     url.searchParams.set("client_secret", credentials.clientSecret);
-    const response = await deps.fetch(url);
-    if (!response.ok) throw new MarketoAuthError(response.status);
-    const body = (await response.json()) as { access_token?: string };
-    if (!body.access_token) throw new MarketoAuthError(response.status);
-    return body.access_token;
+    return inFlight(async () => {
+      const response = await deps.fetch(url);
+      if (!response.ok) throw new MarketoAuthError(response.status);
+      const body = (await response.json()) as { access_token?: string };
+      if (!body.access_token) throw new MarketoAuthError(response.status);
+      return body.access_token;
+    });
   }
 
   async function call(method: "GET" | "POST", path: string): Promise<MarketoResponse> {

@@ -148,10 +148,8 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
   let inFlight = 0;
   let maxInFlight = 0;
 
-  /** Answers a REST request one macrotask later, so concurrent callers overlap as on a real network. */
+  /** Answers each request one macrotask later, so concurrent callers overlap as on a real network. */
   const fakeFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const restCall = new URL(input instanceof Request ? input.url : input).pathname.startsWith("/rest/");
-    if (!restCall) return answer(input, init);
     inFlight += 1;
     maxInFlight = Math.max(maxInFlight, inFlight);
     try {
@@ -244,7 +242,7 @@ export function createFakeMarketo(options: FakeMarketoOptions = {}) {
     restRequests: () => requests.filter((r) => r.url.pathname.startsWith("/rest/")),
     tokenRequests: () => requests.filter((r) => r.url.pathname === "/identity/oauth/token"),
     campaign: (id: number) => campaigns.get(id),
-    /** The most REST requests that were in flight at the same time. */
+    /** The most requests, identity calls included, that were in flight at the same time. */
     maxConcurrentRequests: () => maxInFlight,
     /** Refuse every token request after the first `count`, as when the API user is revoked mid-run. */
     rejectTokenRequestsAfter: (count: number) => {
