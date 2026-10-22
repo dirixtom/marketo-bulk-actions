@@ -49,7 +49,7 @@ export class MarketoAuthError extends Error {
   }
 }
 
-/** Marketo's daily API quota is used up (607). Ends the run. */
+/** Marketo's daily API quota is used up, code 607. Ends the run. */
 export class MarketoQuotaError extends Error {
   override name = "MarketoQuotaError";
   constructor() {
@@ -58,9 +58,9 @@ export class MarketoQuotaError extends Error {
 }
 
 const NOT_FOUND_CODES = new Set(["702", "610"]);
-/** Invalid or expired access token: fetch a new one and retry once. */
+/** Invalid or expired access token. Fetch a new one and retry once. */
 const TOKEN_CODES = new Set(["601", "602"]);
-/** Rate limit (606) or concurrency limit (615) exceeded: back off exponentially and retry. */
+/** Rate limit 606 or concurrency limit 615 exceeded. Back off exponentially and retry. */
 const THROTTLE_CODES = new Set(["606", "615"]);
 const FIRST_BACKOFF_MS = 2000;
 const MAX_THROTTLED_ATTEMPTS = 5;
@@ -68,7 +68,7 @@ const QUOTA_CODE = "607";
 /** Marketo allows 10 concurrent REST calls per instance. */
 const MAX_CALLS_IN_FLIGHT = 10;
 
-/** Runs at most `max` tasks at a time; the rest wait in call order. */
+/** Runs at most `max` tasks at a time. The rest wait in call order. */
 function createLimiter(max: number) {
   let running = 0;
   const waiting: (() => void)[] = [];
@@ -133,7 +133,7 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
       if (code === QUOTA_CODE) throw new MarketoQuotaError();
       if (TOKEN_CODES.has(code) && !reauthenticated) {
         reauthenticated = true;
-        // Calls in flight share the token; only the first to see it rejected fetches a new one.
+        // Calls in flight share the token. Only the first to see it rejected fetches a new one.
         if (token === tokenUsed) token = undefined;
         continue;
       }
@@ -145,16 +145,21 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     }
   }
 
+  /** Resolves to null when Marketo answers that the asset does not exist. */
+  async function orNotFound(response: Promise<MarketoResponse>): Promise<MarketoResponse | null> {
+    try {
+      return await response;
+    } catch (error) {
+      if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
+      throw error;
+    }
+  }
+
   return {
     /** Returns null when Marketo has no smart campaign with this ID. */
     async getSmartCampaign(id: number): Promise<SmartCampaign | null> {
-      try {
-        const body = await call("GET", `/asset/v1/smartCampaign/${id}.json?includeFlowSteps=false`);
-        return (body.result?.[0] as SmartCampaign | undefined) ?? null;
-      } catch (error) {
-        if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
-        throw error;
-      }
+      const body = await orNotFound(call("GET", `/asset/v1/smartCampaign/${id}.json?includeFlowSteps=false`));
+      return (body?.result?.[0] as SmartCampaign | undefined) ?? null;
     },
     /** Every smart campaign in the instance, or in one workspace, from the Lead Database API. */
     async listCampaigns(options: { workspaceName?: string } = {}): Promise<CatalogCampaign[]> {
@@ -181,18 +186,14 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     getFolderName(id: number): Promise<string | null> {
       let name = folderNames.get(id);
       if (!name) {
-        name = call("GET", `/asset/v1/folder/${id}.json?type=Folder`).then(
-          (body) => (body.result?.[0] as { name?: string } | undefined)?.name ?? null,
-          (error) => {
-            if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
-            throw error;
-          },
+        name = orNotFound(call("GET", `/asset/v1/folder/${id}.json?type=Folder`)).then(
+          (body) => (body?.result?.[0] as { name?: string } | undefined)?.name ?? null,
         );
         folderNames.set(id, name);
       }
       return name;
     },
-    /** The workspaces: the `Zone` folders near the top of the folder tree. */
+    /** The workspaces, which are the `Zone` folders near the top of the folder tree. */
     async listWorkspaces(): Promise<{ id: number; name: string }[]> {
       const body = await call("GET", "/asset/v1/folders.json?maxDepth=2&maxReturn=200");
       return ((body.result ?? []) as { id: number; name: string; folderType?: string }[])
