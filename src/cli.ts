@@ -27,6 +27,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     options: {
       instance: { type: "string" },
       campaign: { type: "string", multiple: true },
+      "dry-run": { type: "boolean" },
       yes: { type: "boolean" },
     },
   });
@@ -37,5 +38,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     client,
     references: values.campaign ?? [],
     output: deps.output,
+    confirm: deps.confirm,
+    dryRun: values["dry-run"] ?? false,
+    yes: values.yes ?? false,
   });
 }

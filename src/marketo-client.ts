@@ -14,10 +14,37 @@ export interface MarketoClientDeps {
   sleep: (ms: number) => Promise<void>;
 }
 
+interface MarketoResponse {
+  success: boolean;
+  result?: unknown[];
+  errors?: { code: string; message: string }[];
+  warnings?: string[];
+  nextPageToken?: string;
+}
+
+/** A `success:false` response, carrying Marketo's first error code and message. */
+export class MarketoApiError extends Error {
+  override name = "MarketoApiError";
+  constructor(
+    readonly code: string,
+    readonly marketoMessage: string,
+  ) {
+    super(`${code} ${marketoMessage}`);
+  }
+}
+
+const NOT_FOUND_CODES = new Set(["702", "610"]);
+
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
+  let token: Promise<string> | undefined;
 
-  async function getToken(): Promise<string> {
+  function getToken(): Promise<string> {
+    token ??= fetchToken();
+    return token;
+  }
+
+  async function fetchToken(): Promise<string> {
     const url = new URL(`${base}/identity/oauth/token`);
     url.searchParams.set("grant_type", "client_credentials");
     url.searchParams.set("client_id", credentials.clientId);
@@ -27,19 +54,29 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
     return body.access_token;
   }
 
-  async function call(method: "GET" | "POST", path: string) {
-    const token = await getToken();
+  async function call(method: "GET" | "POST", path: string): Promise<MarketoResponse> {
     const response = await deps.fetch(`${base}/rest${path}`, {
       method,
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${await getToken()}` },
     });
-    return (await response.json()) as { success: boolean; result?: unknown[] };
+    const body = (await response.json()) as MarketoResponse;
+    if (!body.success) {
+      const error = body.errors?.[0];
+      throw new MarketoApiError(error?.code ?? "unknown", error?.message ?? "Marketo returned success:false");
+    }
+    return body;
   }
 
   return {
+    /** Returns null when Marketo has no smart campaign with this ID. */
     async getSmartCampaign(id: number): Promise<SmartCampaign | null> {
-      const body = await call("GET", `/asset/v1/smartCampaign/${id}.json?includeFlowSteps=false`);
-      return (body.result?.[0] as SmartCampaign | undefined) ?? null;
+      try {
+        const body = await call("GET", `/asset/v1/smartCampaign/${id}.json?includeFlowSteps=false`);
+        return (body.result?.[0] as SmartCampaign | undefined) ?? null;
+      } catch (error) {
+        if (error instanceof MarketoApiError && NOT_FOUND_CODES.has(error.code)) return null;
+        throw error;
+      }
     },
     async activateSmartCampaign(id: number): Promise<void> {
       await call("POST", `/asset/v1/smartCampaign/${id}/activate.json`);
