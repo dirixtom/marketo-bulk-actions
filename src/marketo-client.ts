@@ -49,6 +49,14 @@ export class MarketoAuthError extends Error {
   }
 }
 
+/** Marketo's daily API quota is used up (607). Ends the run. */
+export class MarketoQuotaError extends Error {
+  override name = "MarketoQuotaError";
+  constructor() {
+    super("Marketo daily API quota reached");
+  }
+}
+
 const NOT_FOUND_CODES = new Set(["702", "610"]);
 /** Invalid or expired access token: fetch a new one and retry once. */
 const TOKEN_CODES = new Set(["601", "602"]);
@@ -56,6 +64,7 @@ const TOKEN_CODES = new Set(["601", "602"]);
 const THROTTLE_CODES = new Set(["606", "615"]);
 const FIRST_BACKOFF_MS = 2000;
 const MAX_THROTTLED_ATTEMPTS = 5;
+const QUOTA_CODE = "607";
 
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
@@ -92,6 +101,7 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
       if (body.success) return body;
       const error = body.errors?.[0];
       const code = error?.code ?? "unknown";
+      if (code === QUOTA_CODE) throw new MarketoQuotaError();
       if (TOKEN_CODES.has(code) && !reauthenticated) {
         reauthenticated = true;
         // Calls in flight share the token; only the first to see it rejected fetches a new one.

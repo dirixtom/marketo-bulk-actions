@@ -1,6 +1,6 @@
 import type { CampaignAction } from "./commands.ts";
 import type { Instance } from "./instance.ts";
-import { MarketoApiError, MarketoAuthError, type MarketoClient } from "./marketo-client.ts";
+import { MarketoApiError, MarketoAuthError, type MarketoClient, MarketoQuotaError } from "./marketo-client.ts";
 import { resolveReferences } from "./resolve-references.ts";
 import { type Outcome, writeRunRecord } from "./run-record.ts";
 import type { Output } from "./cli.ts";
@@ -64,12 +64,22 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
     }
   }
 
+  let quotaError: MarketoQuotaError | undefined;
   for (const result of toChange) {
+    if (quotaError) {
+      fail(result, QUOTA_REASON);
+      continue;
+    }
     try {
       await action.act(client, result.id!);
       result.outcome = "done";
     } catch (error) {
-      fail(result, describeError(error));
+      if (error instanceof MarketoQuotaError) {
+        quotaError = error;
+        fail(result, QUOTA_REASON);
+      } else {
+        fail(result, describeError(error));
+      }
     }
   }
 
@@ -92,8 +102,12 @@ export async function runCampaignAction(action: CampaignAction, options: RunOpti
       };
     }),
   });
+  // Reported and recorded first, so the operator sees what changed before the run ends.
+  if (quotaError) throw quotaError;
   return exitCode();
 }
+
+const QUOTA_REASON = "daily API quota reached";
 
 function printPlan(action: CampaignAction, results: CampaignResult[], output: Output): void {
   const sections: [string, CampaignResult[]][] = [
@@ -140,7 +154,7 @@ function fail(result: CampaignResult, reason: string): void {
 
 /** Describes an error that fails one campaign; errors that must end the run are rethrown. */
 function describeError(error: unknown): string {
-  if (error instanceof MarketoAuthError) throw error;
+  if (error instanceof MarketoAuthError || error instanceof MarketoQuotaError) throw error;
   if (error instanceof MarketoApiError) return `Marketo error ${error.code}: ${error.marketoMessage}`;
   return error instanceof Error ? error.message : String(error);
 }

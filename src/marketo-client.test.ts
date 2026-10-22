@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createFakeMarketo } from "./test-support/fake-marketo.ts";
 import { runTestCli } from "./test-support/run-cli.ts";
@@ -98,5 +100,52 @@ describe("Marketo rate and concurrency limits", () => {
     expect(run.stdout).toMatch(/^done\s+2 Two$/m);
     expect(run.sleeps).toEqual([2000, 4000, 8000, 16000]);
     expect(fake.restRequests().filter((r) => r.url.pathname === ACTIVATE_1)).toHaveLength(5);
+  });
+});
+
+describe("Marketo daily quota", () => {
+  const QUOTA_MESSAGE = "Marketo daily API quota reached for instance sec (607). It resets at 12:00 AM CST.";
+
+  it("stops the run before acting when 607 arrives while reading campaigns", async () => {
+    const fake = createFakeMarketo({
+      campaigns: [
+        { id: 1, name: "One" },
+        { id: 2, name: "Two" },
+      ],
+    });
+    fake.failWith({ path: "/rest/asset/v1/smartCampaign/1.json", code: "607" });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=1", "--campaign=2", "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr).toContain(QUOTA_MESSAGE);
+    expect(fake.restRequests().filter((r) => r.method === "POST")).toHaveLength(0);
+    expect(run.sleeps).toEqual([]);
+  });
+
+  it("reports what changed, saves the run record and stops when 607 arrives while acting", async () => {
+    const fake = createFakeMarketo({
+      campaigns: [
+        { id: 1, name: "One" },
+        { id: 2, name: "Two" },
+      ],
+    });
+    fake.failWith({ method: "POST", path: "/rest/asset/v1/smartCampaign/2/activate.json", code: "607" });
+
+    const run = await runTestCli(
+      ["campaigns:activate", "--instance=sec", "--campaign=1", "--campaign=2", "--yes"],
+      { fake },
+    );
+
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toMatch(/^done\s+1 One$/m);
+    expect(run.stdout).toMatch(/^failed\s+2 Two \(daily API quota reached\)$/m);
+    expect(run.stdout).toContain("1 done · 0 skipped · 1 failed");
+    expect(run.stderr).toContain(QUOTA_MESSAGE);
+    const runs = readdirSync(join(run.instancesRoot, "sec", "runs"));
+    expect(runs).toHaveLength(1);
   });
 });

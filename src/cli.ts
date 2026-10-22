@@ -4,7 +4,7 @@ import { runCampaignAction } from "./campaign-runner.ts";
 import { campaignActions } from "./commands.ts";
 import { ConfigError } from "./errors.ts";
 import { loadInstance } from "./instance.ts";
-import { createMarketoClient, MarketoAuthError } from "./marketo-client.ts";
+import { createMarketoClient, MarketoAuthError, MarketoQuotaError } from "./marketo-client.ts";
 
 export interface Output {
   log: (line: string) => void;
@@ -75,6 +75,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           "Check MARKETO_CLIENT_ID and MARKETO_CLIENT_SECRET.",
       );
       return 2;
+    }
+    if (error instanceof MarketoQuotaError) {
+      deps.output.error(
+        `Marketo daily API quota reached for instance ${instanceName} (607). It resets at 12:00 AM CST.`,
+      );
+      return 1;
     }
     throw error;
   }
