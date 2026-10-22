@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { readCampaignList } from "./campaign-list.ts";
 import { runCampaignAction } from "./campaign-runner.ts";
 import { campaignActions } from "./commands.ts";
 import { ConfigError } from "./errors.ts";
@@ -41,15 +42,17 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     }
     const values = parseFlags(rest);
     if (!values.instance) throw new ConfigError("--instance is required, e.g. --instance=sec");
-    if (values.list !== undefined) throw new ConfigError("--list is not yet supported, use --campaign");
     if (values.workspace !== undefined) throw new ConfigError("--workspace is not yet supported");
-    const references = values.campaign ?? [];
-    if (references.length === 0) {
-      throw new ConfigError("No campaign references given. Pass --campaign=<id> (repeatable) or --list=<list>");
-    }
 
     instanceName = values.instance;
     const instance = loadInstance(values.instance, deps.instancesRoot);
+    const references = [
+      ...(values.list !== undefined ? readCampaignList(instance.folder, values.list) : []),
+      ...(values.campaign ?? []),
+    ];
+    if (references.length === 0) {
+      throw new ConfigError("No campaign references given. Pass --campaign=<id> (repeatable) or --list=<list>");
+    }
     const client = createMarketoClient(instance.credentials, { fetch: deps.fetch, sleep: deps.sleep });
     return await runCampaignAction(action, {
       instance,
