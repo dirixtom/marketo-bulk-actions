@@ -50,6 +50,8 @@ export class MarketoAuthError extends Error {
 }
 
 const NOT_FOUND_CODES = new Set(["702", "610"]);
+/** Invalid or expired access token: fetch a new one and retry once. */
+const TOKEN_CODES = new Set(["601", "602"]);
 
 export function createMarketoClient(credentials: Credentials, deps: MarketoClientDeps) {
   const base = `https://${credentials.munchkinId}.mktorest.com`;
@@ -74,16 +76,25 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
   }
 
   async function call(method: "GET" | "POST", path: string): Promise<MarketoResponse> {
-    const response = await deps.fetch(`${base}/rest${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${await getToken()}` },
-    });
-    const body = (await response.json()) as MarketoResponse;
-    if (!body.success) {
+    let reauthenticated = false;
+    for (;;) {
+      const tokenUsed = getToken();
+      const response = await deps.fetch(`${base}/rest${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${await tokenUsed}` },
+      });
+      const body = (await response.json()) as MarketoResponse;
+      if (body.success) return body;
       const error = body.errors?.[0];
-      throw new MarketoApiError(error?.code ?? "unknown", error?.message ?? "Marketo returned success:false");
+      const code = error?.code ?? "unknown";
+      if (TOKEN_CODES.has(code) && !reauthenticated) {
+        reauthenticated = true;
+        // Calls in flight share the token; only the first to see it rejected fetches a new one.
+        if (token === tokenUsed) token = undefined;
+        continue;
+      }
+      throw new MarketoApiError(code, error?.message ?? "Marketo returned success:false");
     }
-    return body;
   }
 
   return {
