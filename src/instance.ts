@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
 import { ConfigError } from "./errors.ts";
+import { isDirectory, isSafeName, notFoundError } from "./named-files.ts";
 
 export interface Credentials {
   munchkinId: string;
@@ -35,12 +36,8 @@ export type InstanceConfig = z.infer<typeof configSchema>;
 /** Loads `<instancesRoot>/<name>`: credentials from `.env` then `.env.local`, and `config.json`. */
 export function loadInstance(name: string, instancesRoot: string): Instance {
   const folder = join(instancesRoot, name);
-  if (!isInstanceName(name) || !isDirectory(folder)) {
-    const available = listInstances(instancesRoot);
-    throw new ConfigError(
-      `Instance "${name}" not found in ${instancesRoot}. ` +
-        (available.length > 0 ? `Available instances: ${available.join(", ")}` : "No instances exist yet."),
-    );
+  if (!isSafeName(name) || !isDirectory(folder)) {
+    throw notFoundError("instance", name, instancesRoot, listInstances(instancesRoot));
   }
 
   const env = { ...readEnvFile(join(folder, ".env")), ...readEnvFile(join(folder, ".env.local")) };
@@ -60,14 +57,6 @@ export function loadInstance(name: string, instancesRoot: string): Instance {
     },
     config: readConfig(name, join(folder, "config.json")),
   };
-}
-
-function isInstanceName(name: string): boolean {
-  return /^[\w-][\w.-]*$/.test(name);
-}
-
-function isDirectory(path: string): boolean {
-  return existsSync(path) && statSync(path).isDirectory();
 }
 
 function listInstances(instancesRoot: string): string[] {

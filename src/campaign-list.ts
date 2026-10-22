@@ -1,18 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ConfigError } from "./errors.ts";
+import { isFile, isSafeName, notFoundError } from "./named-files.ts";
 
 /** Reads `<instance folder>/lists/<list>.csv` into campaign references. */
 export function readCampaignList(instanceFolder: string, list: string): string[] {
   const listsFolder = join(instanceFolder, "lists");
   const path = join(listsFolder, `${list}.csv`);
-  if (!/^[\w-][\w.-]*$/.test(list) || !isFile(path)) {
-    const available = listNames(listsFolder);
-    throw new ConfigError(
-      `List "${list}" not found in ${listsFolder}. ` +
-        (available.length > 0 ? `Available lists: ${available.join(", ")}` : "No lists exist yet."),
-    );
-  }
+  if (!isSafeName(list) || !isFile(path)) throw notFoundError("list", list, listsFolder, listNames(listsFolder));
   return parseCampaignList(readFileSync(path, "utf8"));
 }
 
@@ -63,10 +57,6 @@ function parseCsv(text: string): string[][] {
   row.push(cell);
   rows.push(row);
   return rows;
-}
-
-function isFile(path: string): boolean {
-  return existsSync(path) && statSync(path).isFile();
 }
 
 function listNames(listsFolder: string): string[] {
