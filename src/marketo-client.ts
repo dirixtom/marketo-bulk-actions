@@ -133,6 +133,13 @@ export function createMarketoClient(credentials: Credentials, deps: MarketoClien
       }
       return name;
     },
+    /** The workspaces: the `Zone` folders near the top of the folder tree. */
+    async listWorkspaces(): Promise<{ id: number; name: string }[]> {
+      const body = await call("GET", "/asset/v1/folders.json?maxDepth=2&maxReturn=200");
+      return ((body.result ?? []) as { id: number; name: string; folderType?: string }[])
+        .filter((folder) => folder.folderType === "Zone")
+        .map(({ id, name }) => ({ id, name }));
+    },
     async activateSmartCampaign(id: number): Promise<void> {
       await call("POST", `/asset/v1/smartCampaign/${id}/activate.json`);
     },

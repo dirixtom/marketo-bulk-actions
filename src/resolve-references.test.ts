@@ -146,4 +146,32 @@ describe("narrowing names to one workspace", () => {
     const catalog = run.fake.restRequests().filter((r) => r.url.pathname === "/rest/v1/campaigns.json");
     expect(catalog.map((r) => r.url.searchParams.get("workspaceName"))).toEqual(["EMEA"]);
   });
+
+  const folders = [
+    { id: 15, name: "EMEA", folderType: "Zone" },
+    { id: 16, name: "US", folderType: "Zone" },
+    { id: 17, name: "Webinars", folderType: "Folder" },
+  ];
+
+  it("resolves a numeric --workspace to its name first", async () => {
+    const run = await runTestCli([...activate("Send Invite"), "--workspace=16"], {
+      marketo: { campaigns, folders },
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.fake.campaign(2)?.isActive).toBe(true);
+    expect(run.fake.campaign(1)?.isActive).toBe(false);
+    const catalog = run.fake.restRequests().filter((r) => r.url.pathname === "/rest/v1/campaigns.json");
+    expect(catalog.map((r) => r.url.searchParams.get("workspaceName"))).toEqual(["US"]);
+  });
+
+  it("exits 2 naming the known workspaces when a numeric --workspace matches none", async () => {
+    const run = await runTestCli([...activate("Send Invite"), "--workspace=17"], {
+      marketo: { campaigns, folders },
+    });
+
+    expect(run.exitCode).toBe(2);
+    expect(run.stderr).toContain("Workspace 17 not found. Workspaces: 15 EMEA, 16 US");
+    expect(run.fake.restRequests().filter((r) => r.url.pathname === "/rest/v1/campaigns.json")).toHaveLength(0);
+  });
 });

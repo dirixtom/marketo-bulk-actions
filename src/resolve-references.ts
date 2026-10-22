@@ -1,3 +1,4 @@
+import { ConfigError } from "./errors.ts";
 import type { MarketoClient } from "./marketo-client.ts";
 
 export type Resolution = { reference: string; id: number } | { reference: string; error: string };
@@ -18,8 +19,20 @@ export async function resolveReferences(
   workspace?: string,
 ): Promise<Resolution[]> {
   const names = references.filter((reference) => !ID_PATTERN.test(reference));
-  const catalog = names.length === 0 ? [] : await loadCatalog(names, client, workspace);
+  if (names.length === 0) return matchReferences(references, []);
+  const catalog = await loadCatalog(names, client, await workspaceName(workspace, client));
   return matchReferences(references, catalog);
+}
+
+/** A numeric `--workspace` is a workspace ID; the catalog filters by name only. */
+async function workspaceName(workspace: string | undefined, client: MarketoClient): Promise<string | undefined> {
+  if (workspace === undefined || !ID_PATTERN.test(workspace)) return workspace;
+  const workspaces = await client.listWorkspaces();
+  const match = workspaces.find((candidate) => candidate.id === Number(workspace));
+  if (match) return match.name;
+  throw new ConfigError(
+    `Workspace ${workspace} not found. Workspaces: ${workspaces.map(({ id, name }) => `${id} ${name}`).join(", ")}`,
+  );
 }
 
 /**
