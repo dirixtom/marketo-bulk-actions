@@ -1,0 +1,11 @@
+node_modules/
+.claude/worktrees/
+
+# Instance folders hold client credentials, lists and run records. Only the example is committed.
+instances/*
+!instances/example/
+.env
+.env.*
+!.env.example
+runs/
+.vitest/

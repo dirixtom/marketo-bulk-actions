@@ -2,10 +2,26 @@
 
 ## Project
 
-- Repo: `dirixtom/marketo-bulk-actions`. Empty as of 2026-10-22: no source, no commits, no stack chosen yet.
-- Purpose, from the name: run bulk actions against a Marketo instance.
-- Marketo API credentials (client ID, client secret, instance endpoints) go in `.env` / `.env.local` only. Commit placeholders in `.env.example`.
-- Update this section once the stack is scaffolded: package manager, build/test/lint commands, folder layout.
+- Repo: `dirixtom/marketo-bulk-actions`. A TypeScript CLI that runs bulk actions against one Marketo instance per run. v1: activate/deactivate smart campaigns.
+- Stack: Node 22+, pnpm, TypeScript run with `tsx` (no build step), Zod, Vitest.
+- Commands: `pnpm campaigns:activate|campaigns:deactivate --instance=<name> ...`, `pnpm test`, `pnpm typecheck`. No linter configured.
+- Layout: `src/cli.ts` is the CLI entry and the only test seam (`runCli(argv, deps)`); `src/main.ts` wires Node to it. `src/commands.ts` holds action definitions; a new bulk action is one more entry there plus its Marketo client calls. `src/test-support/` has the fake Marketo.
+- Instances: `instances/<name>/` holds `.env` / `.env.local` (`MARKETO_MUNCHKIN_ID`, `MARKETO_CLIENT_ID`, `MARKETO_CLIENT_SECRET` only), `config.json`, `lists/*.csv` and `runs/`. Everything under `instances/` except `instances/example/` is gitignored. Never read real instance `.env` files.
+- Spec: issue 11. Marketo API research lives on the unmerged `research/*` branches.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `dirixtom/marketo-bulk-actions`, via `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 # Global Development Standards
 
