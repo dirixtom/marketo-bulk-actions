@@ -95,3 +95,38 @@ describe("resolving campaign references by name", () => {
     expect(run.stdout).toContain("1 done · 0 skipped · 0 failed");
   });
 });
+
+describe("fetching the campaign catalog", () => {
+  const catalogRequests = (run: Awaited<ReturnType<typeof runTestCli>>) =>
+    run.fake.restRequests().filter((r) => r.url.pathname === "/rest/v1/campaigns.json");
+
+  it("does not fetch the catalog when every reference is an ID", async () => {
+    const run = await runTestCli(activate("1", "2"), {
+      marketo: {
+        campaigns: [
+          { id: 1, name: "One" },
+          { id: 2, name: "Two" },
+        ],
+      },
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(catalogRequests(run)).toHaveLength(0);
+  });
+
+  it("fetches every page once for all name references", async () => {
+    const campaigns = Array.from({ length: 650 }, (_, i) => ({
+      id: i + 1,
+      name: `Campaign ${i + 1}`,
+      programName: "Program",
+    }));
+
+    const run = await runTestCli(activate("Campaign 2", "Program.Campaign 640"), { marketo: { campaigns } });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.fake.campaign(2)?.isActive).toBe(true);
+    expect(run.fake.campaign(640)?.isActive).toBe(true);
+    const pages = catalogRequests(run);
+    expect(pages.map((r) => r.url.searchParams.get("nextPageToken"))).toEqual([null, "300", "600"]);
+  });
+});
